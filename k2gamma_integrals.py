@@ -51,7 +51,7 @@ cell.unit = 'B'
 cell.verbose = 4
 cell.build()
 
-kpts = cell.make_kpts([2,1,1])
+kpts = cell.make_kpts([3,1,1])
 nkpts = len(kpts)
 
 # Get overlap matrix and kinetic matrix
@@ -119,18 +119,20 @@ print np.linalg.norm(eri_scell-eri_k2gamma1)
 
 print 'transform 6d k-eri to supercell'
 eri_3d_L = np.zeros((nkpts,nkpts,nkpts,NL,nao,nao),dtype=eri_3d_kpts.dtype)
+kscaled = cell.get_scaled_kpts(kpts)
 for kp in range(nkpts):
     for kq in range(nkpts):
-        'Note: this is a fake k conservation'
-        kL = abs(kp-kq)
-        print kL,kp,kq
-        eri_3d_L[kL,kp,kq] = eri_3d_kpts[kp,kq].copy()
-eri_3d_k2gamma = np.einsum('Tn,Rk,Sm,nkmLpq->TLRpSq',phase,phase,phase,eri_3d_L)
+        for kL in range(nkpts):
+            kconserv = -kscaled[kp]+kscaled[kq]+kscaled[kL]
+            if np.linalg.norm(np.round(kconserv)-kconserv) < 1e-10:
+                eri_3d_L[kL,kp,kq] = eri_3d_kpts[kp,kq].copy()
+eri_3d_k2gamma = np.einsum('Tn,Rk,nkmLpq,Sm->TLRpSq',phase,phase,eri_3d_L,phase.conj())
 eri_3d_k2gamma = eri_3d_k2gamma.reshape(NL*nkpts,nao*nkpts,nao*nkpts)
 
 eri_k2gamma = np.einsum('Lpq,Lrs->pqrs',eri_3d_k2gamma,eri_3d_k2gamma)/nkpts
 print np.linalg.norm(eri_scell-eri_k2gamma)
-np.set_printoptions(3, linewidth=1000, suppress=True)
+print (abs(eri_scell-eri_k2gamma).max())
+np.set_printoptions(4, linewidth=1000, suppress=False)
 print eri_scell[0,0]
 print eri_k2gamma1[0,0]
 print eri_k2gamma[0,0]
