@@ -51,7 +51,7 @@ cell.unit = 'B'
 cell.verbose = 4
 cell.build()
 
-kpts = cell.make_kpts([3,1,1])
+kpts = cell.make_kpts([2,1,1])
 nkpts = len(kpts)
 
 # Get overlap matrix and kinetic matrix
@@ -90,6 +90,7 @@ for i, kpti in enumerate(kpts):
         eri_3d_kpts[i].append(eri_3d)
 print 'eri_3d shape'
 print len(eri_3d_kpts),len(eri_3d_kpts[0]),eri_3d.shape
+NL = eri_3d.shape[0]
 
 # Test 2-e integrals
 #eri = np.einsum('Lpq,Lrs->pqrs', eri_3d_kpts[0][2], eri_3d_kpts[2][0])
@@ -103,11 +104,33 @@ s = scell.pbc_intor('int1e_ovlp')
 s1 = np.einsum('Rk,kij,Sk->RiSj', phase, s_k, phase.conj())
 print(abs(s-s1.reshape(s.shape)).max())
 
+print 'transfrom 5d k-eri to supercell'
 eri_3d_kpts = np.asarray(eri_3d_kpts)
 eri_3d_k2gamma = np.einsum('Rk,kmLpq,Sm->LRpSq',phase,eri_3d_kpts,phase.conj())
-eri_3d_k2gamma = eri_3d_k2gamma.reshape()
+eri_3d_k2gamma = eri_3d_k2gamma.reshape(NL,nao*nkpts,nao*nkpts)
 print eri_3d_k2gamma.shape
 
 mydf_scell = df.GDF(scell)
 eri_scell = mydf_scell.get_eri(compact=False).reshape([nao*nkpts]*4)
 print eri_scell.shape
+
+eri_k2gamma1 = np.einsum('Lpq,Lrs->pqrs',eri_3d_k2gamma,eri_3d_k2gamma)/nkpts
+print np.linalg.norm(eri_scell-eri_k2gamma1)
+
+print 'transform 6d k-eri to supercell'
+eri_3d_L = np.zeros((nkpts,nkpts,nkpts,NL,nao,nao),dtype=eri_3d_kpts.dtype)
+for kp in range(nkpts):
+    for kq in range(nkpts):
+        'Note: this is a fake k conservation'
+        kL = abs(kp-kq)
+        print kL,kp,kq
+        eri_3d_L[kL,kp,kq] = eri_3d_kpts[kp,kq].copy()
+eri_3d_k2gamma = np.einsum('Tn,Rk,Sm,nkmLpq->TLRpSq',phase,phase,phase,eri_3d_L)
+eri_3d_k2gamma = eri_3d_k2gamma.reshape(NL*nkpts,nao*nkpts,nao*nkpts)
+
+eri_k2gamma = np.einsum('Lpq,Lrs->pqrs',eri_3d_k2gamma,eri_3d_k2gamma)/nkpts
+print np.linalg.norm(eri_scell-eri_k2gamma)
+np.set_printoptions(3, linewidth=1000, suppress=True)
+print eri_scell[0,0]
+print eri_k2gamma1[0,0]
+print eri_k2gamma[0,0]
